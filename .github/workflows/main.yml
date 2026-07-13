@@ -7,9 +7,15 @@ on:
 
 jobs:
   test:
-    name: Functional Test
-    permissions: write-all
+    name: Functional Test (${{ matrix.browser }})
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        browser:
+          - firefox
+          - chrome
+          - edge
 
     steps:
       - name: Checkout the repo
@@ -32,7 +38,21 @@ jobs:
         run: curl ${{ env.URL }}
 
       - name: Deploy Selenium
-        run: docker run -d --network=isolated -p 4444:4444 -p 7900:7900 -v /dev/shm:/dev/shm --name firefox-standalone selenium/standalone-firefox:latest
+        run: |
+          if [ "${{ matrix.browser }}" = "firefox" ]; then
+            IMAGE=selenium/standalone-firefox
+          elif [ "${{ matrix.browser }}" = "chrome" ]; then
+            IMAGE=selenium/standalone-chrome
+          else
+            IMAGE=selenium/standalone-edge
+          fi
+
+          docker run -d \
+            --network=isolated \
+            --name selenium \
+            -p 4444:4444 \
+            -p 7900:7900 \
+            $IMAGE
         
       - name: Wait until Selenium Ready
         run: sh wait.sh
