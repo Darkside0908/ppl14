@@ -32,5 +32,23 @@ jobs:
       - name: Check AUT Url
         run: curl ${{ env.URL }}
 
+      - name: Deploy Selenium
+        run: |
+          docker pull selenium/standalone-firefox
+          docker run -d \
+            --network=isolated \
+            -p 4444:4444 \
+            -p 7900:7900 \
+            --name selenium \
+            selenium/standalone-firefox
+
+      - name: Wait until Selenium Ready
+        run: bash wait.sh
+
+      - name: Check the Hub
+        run: curl http://localhost:4444/ui
+
+
+
       - name: stop docker
         run: docker stop docker-apache
