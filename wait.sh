@@ -1,10 +1,8 @@
 #!/bin/bash
 
 echo "Waiting Selenium..."
-
-until curl --silent http://localhost:4444/status | grep -q '"ready":true'
-do
-    sleep 2
+until $(curl --output /dev/null --silent --head --fail http://localhost:4444); do
+    echo "Still waiting..."
+    sleep 1
 done
 
-echo "Selenium Ready"
