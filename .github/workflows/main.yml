@@ -8,41 +8,88 @@ on:
 jobs:
   test:
     name: Functional Test
-    permissions: write-all
     runs-on: ubuntu-latest
+    permissions: write-all
 
     steps:
       - name: Checkout the repo
         uses: actions/checkout@v4
 
-      - name: Create Isolated network
-        run: docker network create --driver bridge isolated
+      - name: Create Docker Network
+        run: docker network create isolated
 
-      - name: Deploy AUT
+      - name: Build AUT
         run: docker build -t my-php-site:latest .
 
       - name: Run AUT
-        run: docker run --network=isolated -p 80:80 --name docker-apache -t -d my-php-site:latest
-
-      - name: Get AUT URL
         run: |
-          URL=http://$(ip -f inet -o addr show docker0 | awk '{print $4}' | cut -d '/' -f 1)
-          echo "URL=$URL" >> $GITHUB_ENV
+          docker run -d \
+            --name docker-apache \
+            --network isolated \
+            -p 80:80 \
+            my-php-site:latest
 
-      - name: Check AUT Url
-        run: curl ${{ env.URL }}
+      - name: Check AUT
+        run: |
+          sleep 5
+          curl http://localhost
+
+      ###############################################################
 
       - name: Deploy Selenium
-        run: docker run -d --network=isolated -p 4444:4444 -p 7900:7900 -v /dev/shm:/dev/shm --name firefox-standalone selenium/standalone-firefox:latest
+        run: |
+          docker run -d \
+            --name firefox-standalone \
+            --network isolated \
+            --shm-size=2g \
+            -p 4444:4444 \
+            -p 7900:7900 \
+            selenium/standalone-firefox:4.18.1
 
-      - name: Show Docker Containers
-        run: docker ps -a
+      ###############################################################
 
-      - name: Show Selenium Logs
-        run: docker logs firefox-standalone
+      - name: Wait Selenium Ready
+        run: |
+          echo "Waiting Selenium..."
 
-      - name: Check the Hub
-        run: curl http://localhost:4444/ui
+          timeout 120 bash -c '
+          until curl -s http://localhost:4444/status | grep -q "\"ready\":true"
+          do
+            sleep 2
+            echo "Still waiting..."
+          done
+          '
 
-      - name: stop docker
-        run: docker stop docker-apache
+      ###############################################################
+
+      - name: Show Selenium Status
+        run: |
+          curl http://localhost:4444/status
+
+      ###############################################################
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Selenium
+        run: |
+          pip install -U pip
+          pip install selenium
+
+      ###############################################################
+
+      - name: Run Test
+        run: |
+          python tests/hello_example.py
+
+      ###############################################################
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker ps -a
+          docker logs firefox-standalone || true
+          docker stop firefox-standalone || true
+          docker stop docker-apache || true
