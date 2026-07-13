@@ -48,6 +48,19 @@ jobs:
       - name: Check the Hub
         run: curl http://localhost:4444/ui
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Selenium
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium
+
+      - name: Run Test
+        run: |
+          python tests/hello_example.py
 
 
       - name: stop docker
