@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         browser:
           - firefox
@@ -32,45 +33,66 @@ jobs:
 
       - name: Get AUT URL
         run: |
-          URL=http://$(ip -f inet -o addr show docker0 | awk '{print $4}' | cut -d '/' -f 1)
-          echo "URL=$URL" >> $GITHUB_ENV
+          # Selenium and the AUT share the "isolated" user-defined network,
+          # so the browser (running inside the selenium container) resolves
+          # the AUT via Docker's embedded DNS using its container name.
+          echo "URL=http://docker-apache" >> $GITHUB_ENV
+
       - name: Check AUT Url
-        run: curl ${{ env.URL }}
+        run: curl --fail --retry 5 --retry-delay 2 http://localhost
 
       - name: Deploy Selenium
         run: |
-          if [ "${{ matrix.browser }}" = "firefox" ]; then
-            IMAGE=selenium/standalone-firefox
-          elif [ "${{ matrix.browser }}" = "chrome" ]; then
-            IMAGE=selenium/standalone-chrome
-          else
-            IMAGE=selenium/standalone-edge
-          fi
+          case "${{ matrix.browser }}" in
+            firefox) IMAGE=selenium/standalone-firefox:latest ;;
+            chrome)  IMAGE=selenium/standalone-chrome:latest ;;
+            edge)    IMAGE=selenium/standalone-edge:latest ;;
+          esac
 
           docker run -d \
             --network=isolated \
             --name selenium \
+            --shm-size=2g \
             -p 4444:4444 \
             -p 7900:7900 \
-            $IMAGE
-        
-      - name: Wait until Selenium Ready
-        run: sh wait.sh
+            "$IMAGE"
 
-      - name: Check the Hub
-        run: curl http://localhost:4444/ui
+      - name: Wait until Selenium Ready
+        run: bash wait.sh
+
+      - name: Selenium status & running containers
+        if: always()
+        run: |
+          echo "---- docker ps ----"
+          docker ps -a
+          echo "---- Selenium /status ----"
+          curl -s http://localhost:4444/status || true
 
       - name: Install Selenium client
         run: pip install -U selenium
 
       - name: Run Test
-        run: python tests/hello_aut.py ${{ env.URL }}
+        run: python -u tests/hello_aut.py "${{ env.URL }}" "${{ matrix.browser }}"
 
-      - name: Upload Homepage Artifact
+      - name: Upload Screenshot Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Homepage
+          name: homepage-${{ matrix.browser }}
           path: homepage.png
+          if-no-files-found: warn
 
-      - name: stop docker
-        run: docker stop docker-apache
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "---- selenium logs ----"
+          docker logs selenium || true
+          echo "---- docker-apache logs ----"
+          docker logs docker-apache || true
+
+      - name: Cleanup Docker resources
+        if: always()
+        run: |
+          docker stop selenium docker-apache 2>/dev/null || true
+          docker rm -f selenium docker-apache 2>/dev/null || true
+          docker network rm isolated 2>/dev/null || true
