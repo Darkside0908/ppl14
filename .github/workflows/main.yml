@@ -34,9 +34,12 @@ jobs:
 
       - name: Deploy Selenium
         run: docker run -d --network=isolated -p 4444:4444 -p 7900:7900 -v /dev/shm:/dev/shm --name firefox-standalone selenium/standalone-firefox:latest
-        
-      - name: Wait until Selenium Ready
-        run: sh wait.sh
+
+      - name: Show Docker Containers
+        run: docker ps -a
+
+      - name: Show Selenium Logs
+        run: docker logs firefox-standalone
 
       - name: Check the Hub
         run: curl http://localhost:4444/ui
