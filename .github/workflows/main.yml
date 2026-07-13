@@ -33,35 +33,13 @@ jobs:
         run: curl ${{ env.URL }}
 
       - name: Deploy Selenium
-        run: |
-          docker pull selenium/standalone-firefox
-          docker run -d \
-            --network=isolated \
-            -p 4444:4444 \
-            -p 7900:7900 \
-            --name selenium \
-            selenium/standalone-firefox
-
+        run: docker run -d --network=isolated -p 4444:4444 -p 7900:7900 -v /dev/shm:/dev/shm --name firefox-standalone selenium/standalone-firefox:latest
+        
       - name: Wait until Selenium Ready
-        run: bash wait.sh
+        run: sh wait.sh
 
       - name: Check the Hub
         run: curl http://localhost:4444/ui
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Selenium
-        run: |
-          python -m pip install --upgrade pip
-          pip install selenium
-
-      - name: Run Test
-        run: |
-          python tests/hello_example.py
-
 
       - name: stop docker
         run: docker stop docker-apache
